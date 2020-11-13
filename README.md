@@ -23,14 +23,14 @@ The registry key `COMAutoApprovalList` contains lots of CLSIDs for actions that 
 
 I spend lots of time reverse engineering the COM interfaces and the DCOM server to figure out how to use the interfaces and how they behave. Eventually, I figured out that using the three methods listed above allows us to execute an arbitrary program via a call to `CreateProcessW()` from the elevated DCOM server `ieinstal.exe`.
 
-## UACME
-This attack is implemented in UACME as method #64. Unlike ByeIntegrity 1.0, this attack's code is the same as the code/implementation in UACME. The only differences are that ByeIntegrity 2.0 uses `cmd.exe` as a lolbin whereas UACME uses the Fubuki payload,
-and ByeIntegrity 2.0 uses `bdeunlock.exe` as the verification file, whereas UACME uses `consent.exe`.
+## UACMe
+This attack is implemented in UACMe as method #64. Unlike ByeIntegrity 1.0, this attack's code is the same as the code/implementation in UACMe. The only differences are that ByeIntegrity 2.0 uses `cmd.exe` as a lolbin whereas UACMe uses the Fubuki payload,
+and ByeIntegrity 2.0 uses `bdeunlock.exe` as the verification file, whereas UACMe uses `consent.exe`.
 
 ## Using the code
 If you’re reading this then you probably know how to compile the source. Just note that this hasn’t been tested or designed with x86 in mind at all, and it probably won’t work on x86 anyways.
 
-Just like UACME, **I will never upload compiled binaries to this repo.** There are always people who want the world to crash and burn, and I'm not going to provide an easy route for them to run this on somebody else's computer and cause intentional damage. I also don't want script-kiddies to use this attack without understanding what it does and the damage it can cause.
+Just like UACMe, **I will never upload compiled binaries to this repo.** There are always people who want the world to crash and burn, and I'm not going to provide an easy route for them to run this on somebody else's computer and cause intentional damage. I also don't want script-kiddies to use this attack without understanding what it does and the damage it can cause.
 
 The undocumented methods/interfaces have been documented using comments. To read the documentation without reading the comment syntax, just hover over them in Visual Studio and read the tooltip that follows.
 
