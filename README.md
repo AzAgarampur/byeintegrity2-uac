@@ -2,6 +2,10 @@
 The second attack to bypass User Account Control (UAC) and gain elevated (Administrator) privileges to run any program at a high integrity level.
 ![](example.gif)
 
+## Requirements
+- Administrator account
+- UAC notification level set to default or lower
+
 ## How it works
 Unlike ByeIntegrity 1.0, ByeIntegrity 2.0 uses a completely different attack method — an elevated COM interface. The registry key `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\UAC\COMAutoApprovalList` contains a list of CLSIDs that tell UAC to not prompt for elevation when creating an interface from any of the listed CLSIDs.
 
