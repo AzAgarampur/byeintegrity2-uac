@@ -44,5 +44,3 @@ The undocumented methods/interfaces have been documented using comments. To read
 
 ## Supported versions
 This attack works from Windows 7 (7600) up until the latest version of Windows 10.
-
-[![HitCount](http://hits.dwyl.com/AzAgarampur/byeintegrity2-uac.svg)](http://hits.dwyl.com/AzAgarampur/byeintegrity2-uac)
